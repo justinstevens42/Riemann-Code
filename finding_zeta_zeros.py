@@ -568,7 +568,7 @@ def one_term(C, GAMMA1, add_player, arrow_frame, arrows, dot, go, math, mo, np, 
         ]) for i, (done, scale, label) in enumerate(states)]
         fig.update_layout(title_text=states[-1][2])
         plane_window(fig, 0j, 1.3, xtitle=False)
-        style(fig, height=540, legend="right", top=40, bottom=75)
+        style(fig, height=495, legend="right", top=40, bottom=75)
         return add_player(fig, duration=60, from_start=True)
 
 
@@ -651,7 +651,7 @@ def first_30(C, add_player, arrow_frame, arrows, dot, eta_sums, eta_terms, fmt_c
         fig.frames = frames
         fig.update_layout(title_text=caption(1))
         plane_window(fig, center, radius, xtitle=False)
-        style(fig, height=590, legend="right", top=70, bottom=85)
+        style(fig, height=540, legend="right", top=70, bottom=85)
         return add_player(fig, duration=110, step_names=[str(n) for n in range(1, count + 1)],
                           step_labels=[str(n) for n in range(1, count + 1)], prefix="terms added: ")
 
@@ -749,7 +749,7 @@ def keep_adding(C, add_player, arrow_frame, arrows, compare_zeta, dot, eta_fast,
         fig.update_xaxes(type="log", dtick=1, range=[0, np.log10(_N_MAX)], row=1, col=2)
         fig.update_yaxes(type="log", dtick=1, range=[-2.5, 1.2 if show_zeta else 0.7],
                          title_text="distance from 0", row=1, col=2)
-        style(fig, height=450, legend="top", top=62, bottom=85)
+        style(fig, height=405, legend="top", top=62, bottom=85)
         return add_player(fig, duration=170, step_names=[str(n) for n in steps],
                           step_labels=[str(n) for n in steps], prefix="N = ", quiet_ticks=True)
 
@@ -805,7 +805,7 @@ def all_zeros(C, NOT_A_ZERO, ZEROS, eta_sums, functools, go, mo, np, pick_t, sty
         ))
         fig.update_xaxes(type="log", dtick=1, title_text="number of terms N")
         fig.update_yaxes(type="log", dtick=1, title_text="distance from 0", range=[-3.5, 1.0])
-        return style(fig, height=440, top=35, bottom=55)
+        return style(fig, height=395, top=35, bottom=55)
 
 
     mo.vstack([
@@ -937,7 +937,7 @@ def z_stays_real(C, ZEROS, add_player, arrow_frame, arrows, fmt_c, fmt_r, go, ma
         plane_window(fig, 0j, radius, row=1, col=1, xtitle=False)
         fig.update_xaxes(range=[t_from, t_to], row=1, col=2)
         fig.update_yaxes(title_text="Z(t)", row=1, col=2)
-        style(fig, height=500, legend="top", top=62, bottom=85)
+        style(fig, height=450, legend="top", top=62, bottom=85)
         return add_player(fig, duration=90, step_names=[f"{t:.3f}" for t in ts],
                           step_labels=[f"{t:.2f}" for t in ts], prefix="t = ", quiet_ticks=True)
 
@@ -1145,7 +1145,7 @@ def newton_slide(C, NEWTON, THETA_STAR, add_player, fmt_r, go, mo, np, style, th
         fig.update_layout(title_text=caption(0))
         fig.update_xaxes(range=[12.8, 14.5])
         fig.update_yaxes(range=[-2.35, -1.4], title_text="θ(t)")
-        style(fig, height=280, legend="right", top=40, bottom=75)
+        style(fig, height=250, legend="right", top=40, bottom=75)
         return add_player(fig, duration=1600, step_names=[str(k) for k in range(len(NEWTON) - 1)],
                           step_labels=[f"t{k + 1}" for k in range(len(NEWTON) - 1)],
                           prefix="step: ")
@@ -1214,7 +1214,7 @@ def how_close(C, CORRECTED_ZERO, GAMMA1, ONE_COSINE_ZERO, go, make_subplots, mo,
                          zerolinewidth=2)
         fig.update_yaxes(title_text="14.0 to 14.6", row=1, col=1)
         fig.update_yaxes(title_text="zoomed in", row=2, col=1)
-        return style(fig, height=470, top=20, bottom=40)
+        return style(fig, height=425, top=20, bottom=40)
 
 
     mo.vstack([
@@ -1259,7 +1259,7 @@ def beyond(ALL_ZEROS, C, TWO_PI, crossing, go, mo, np, riemann_z, style, z_from_
                           annotation_text=label, annotation_position="top right")
         fig.update_xaxes(title_text="t")
         fig.update_yaxes(title_text="Z(t)")
-        return (style(fig, height=440, top=35, bottom=50), gap,
+        return (style(fig, height=395, top=35, bottom=50), gap,
                 max(abs(f - z) for f, z in zip(found, ALL_ZEROS)))
 
 
@@ -1321,7 +1321,7 @@ def frag_ivt_example(C, fmt_r, go, mo, np, style, z_from_eta):
                                  hoverinfo="skip"))
         fig.update_traces(textfont=dict(color=C["ink2"], size=13))
         fig.update_yaxes(title_text="Z(t)", zeroline=True, zerolinewidth=2)
-        return style(fig, height=230, legend="right", top=15, bottom=30), za, zb
+        return style(fig, height=205, legend="right", top=15, bottom=30), za, zb
 
 
     _fig, _za, _zb = ivt_figure()
@@ -1411,7 +1411,7 @@ def hunt(C, HUNT_BRACKETS, HUNT_GRID, HUNT_Z, NOT_A_ZERO, add_player, go, make_s
         fig.update_xaxes(range=[ts0[0], ts0[-1]], row=1, col=2)
         fig.update_yaxes(range=[-top0, top0], exponentformat="e", title_text="zoomed in",
                          row=1, col=2)
-        style(fig, height=450, legend="top", top=62, bottom=85)
+        style(fig, height=405, legend="top", top=62, bottom=85)
         return add_player(fig, duration=650, step_names=[str(k) for k in range(halvings + 1)],
                           step_labels=[str(k) for k in range(halvings + 1)], prefix="halvings: ")
 
