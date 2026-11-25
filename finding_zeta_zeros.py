@@ -2,7 +2,6 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "marimo>=0.26.0",
-#     "mpmath>=1.3.0",
 #     "numpy>=2.0",
 #     "plotly>=6.0",
 # ]
@@ -22,11 +21,11 @@
 #
 #     uvx marimo edit --sandbox finding_zeta_zeros.py
 #
-# marimo installs the dependencies above into a throwaway environment, so nothing
-# is installed globally. The slide layout lives in
-# layouts/finding_zeta_zeros.slides.json, next to this file; after adding or
-# removing cells, rerun make_slides_layout.py (cells named frag_* appear one step
-# at a time).
+# It also runs in the browser with nothing installed (molab's WebAssembly mode);
+# see README.md. The slide layout is stored inside this file (the layout_file
+# data URI below), so the deck opens as slides wherever the file goes; after
+# adding or removing cells, rerun make_slides_layout.py (cells named frag_*
+# appear one step at a time).
 #
 # Sources for the history: C. L. Siegel, "Uber Riemanns Nachlass zur analytischen
 # Zahlentheorie" (1932), English translation arXiv:1810.05198; G. Hiary,
@@ -39,31 +38,59 @@ __generated_with = "0.26.0"
 app = marimo.App(
     width="medium",
     app_title="Finding the zeros of zeta",
-    layout_file="layouts/finding_zeta_zeros.slides.json",
+    layout_file=(
+        "data:application/json;base64,"
+        "eyJ0eXBlIjoic2xpZGVzIiwiZGF0YSI6eyJjZWxscyI6W3t9LHt9LHt9LHt9LHt9"
+        "LHt9LHsidHlwZSI6ImZyYWdtZW50In0seyJ0eXBlIjoiZnJhZ21lbnQifSx7InR5"
+        "cGUiOiJmcmFnbWVudCJ9LHt9LHsidHlwZSI6ImZyYWdtZW50In0se30seyJ0eXBl"
+        "IjoiZnJhZ21lbnQifSx7InR5cGUiOiJmcmFnbWVudCJ9LHt9LHsidHlwZSI6ImZy"
+        "YWdtZW50In0se30se30se30se30se30se30se30se30se30se30seyJ0eXBlIjoi"
+        "ZnJhZ21lbnQifSx7InR5cGUiOiJmcmFnbWVudCJ9LHsidHlwZSI6ImZyYWdtZW50"
+        "In0se30se30seyJ0eXBlIjoiZnJhZ21lbnQifSx7InR5cGUiOiJmcmFnbWVudCJ9"
+        "LHt9LHsidHlwZSI6ImZyYWdtZW50In0seyJ0eXBlIjoiZnJhZ21lbnQifSx7fSx7"
+        "fSx7fSx7fSx7InR5cGUiOiJmcmFnbWVudCJ9LHt9LHsidHlwZSI6ImZyYWdtZW50"
+        "In0se30se30se30seyJ0eXBlIjoiZnJhZ21lbnQifSx7InR5cGUiOiJmcmFnbWVu"
+        "dCJ9LHt9LHt9LHt9LHsidHlwZSI6ImZyYWdtZW50In0seyJ0eXBlIjoiZnJhZ21l"
+        "bnQifSx7InR5cGUiOiJmcmFnbWVudCJ9LHsidHlwZSI6ImZyYWdtZW50In1dLCJk"
+        "ZWNrIjp7InRyYW5zaXRpb24iOiJzbGlkZSIsInZlcnRpY2FsQWxpZ24iOiJ0b3Ai"
+        "fX19"
+    ),
 )
 
 
 @app.cell(hide_code=True)
-def _():
+async def _():
+    import sys
+
+    if "pyodide" in sys.modules:  # running in the browser (WebAssembly): fetch plotly
+        import micropip
+
+        await micropip.install("plotly")
+
     import functools
     import math
 
     import marimo as mo
-    import mpmath as mp
     import numpy as np
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
-    return functools, go, make_subplots, math, mo, mp, np
+    return functools, go, make_subplots, math, mo, np
 
 
 @app.cell(hide_code=True)
-def _(math, mp, np):
+def _(math, np):
     # The core computations. Everything in the deck is built from these.
 
     TWO_PI = 2 * math.pi
 
-    # The first ten zeros on the critical line, s = 1/2 + it (found by mpmath).
-    ZEROS = [float(mp.zetazero(k).imag) for k in range(1, 11)]
+    # The first 13 zeros on the critical line, s = 1/2 + it: every zero with t < 60.
+    # (Computed with mpmath.zetazero; they agree with Odlyzko's published tables.)
+    ALL_ZEROS = [14.134725141734694, 21.022039638771555, 25.010857580145689,
+                 30.424876125859513, 32.93506158773919, 37.586178158825671,
+                 40.918719012147495, 43.327073280915, 48.00515088116716,
+                 49.773832477672302, 52.970321477714461, 56.446247697063395,
+                 59.347044002602353]
+    ZEROS = ALL_ZEROS[:10]
     GAMMA1 = ZEROS[0]  # 14.134725141734693...
     NOT_A_ZERO = 16.0
 
@@ -90,39 +117,39 @@ def _(math, mp, np):
 
 
     def eta_fast(t, start=60, rounds=60):
-        """eta(1/2 + it), accurately: eta's totals zigzag around the answer, so average
-        neighbors of S_start, ..., S_(start + rounds) again and again down to one number
-        (the Euler transform; Hasse 1930)."""
-        row = eta_sums(t, start + rounds)[start:]
+        """eta(1/2 + it) for one t or an array of t, accurately: eta's totals zigzag
+        around the answer, so average neighbors of S_start, ..., S_(start + rounds)
+        again and again down to one number (the Euler transform; Hasse 1930)."""
+        ts = np.atleast_1d(np.asarray(t, dtype=float))[:, None]
+        n = np.arange(1, start + rounds + 1)
+        signs = np.where(n % 2 == 1, 1.0, -1.0)
+        totals = np.cumsum(signs * np.exp(-1j * ts * np.log(n)) / np.sqrt(n), axis=1)
+        row = totals[:, start - 1:]  # S_start, ..., S_(start + rounds)
         for _ in range(rounds):
-            row = (row[:-1] + row[1:]) / 2
-        return complex(row[0])
-
-
-    def eta_exact(t):
-        """mpmath's value of eta(1/2 + it), for checking."""
-        return complex(mp.altzeta(mp.mpc(0.5, t)))
+            row = (row[:, :-1] + row[:, 1:]) / 2
+        return row[:, 0] if np.ndim(t) else complex(row[0, 0])
 
 
     def zeta_on_line(t):
-        """zeta(1/2 + it) = eta(s) / (1 - 2^(1-s))."""
-        s = complex(0.5, t)
+        """zeta(1/2 + it) = eta(s) / (1 - 2^(1-s)), for one t or an array of t."""
+        s = 0.5 + 1j * np.asarray(t, dtype=float)
         return eta_fast(t) / (1 - 2 ** (1 - s))
 
 
     def theta(t):
         """Riemann's angle (from Stirling's formula): turning zeta by theta makes it real."""
-        return (t / 2) * math.log(t / TWO_PI) - t / 2 - math.pi / 8 + 1 / (48 * t)
+        return (t / 2) * np.log(t / TWO_PI) - t / 2 - np.pi / 8 + 1 / (48 * t)
 
 
     def theta_slope(t):
         """theta'(t), term by term: (1/2) ln(t/2pi) - 1/(48 t^2)."""
-        return 0.5 * math.log(t / TWO_PI) - 1 / (48 * t * t)
+        return 0.5 * np.log(t / TWO_PI) - 1 / (48 * t * t)
 
 
     def z_from_eta(t):
-        """Hardy's Z(t) = e^(i theta) zeta(1/2 + it), from eta's sums: a real number."""
-        return (complex(math.cos(theta(t)), math.sin(theta(t))) * zeta_on_line(t)).real
+        """Hardy's Z(t) = e^(i theta) zeta(1/2 + it), from eta's sums: a real number.
+        Works for one t or an array of t; agrees with mpmath.siegelz to 1e-12 on [10, 60]."""
+        return (np.exp(1j * theta(np.asarray(t, dtype=float))) * zeta_on_line(t)).real
 
 
     def crossing(f, lo, hi, halvings=50):
@@ -136,12 +163,13 @@ def _(math, mp, np):
                 hi = mid
         return (lo + hi) / 2
     return (
+        ALL_ZEROS,
         GAMMA1,
         NOT_A_ZERO,
         TWO_PI,
         ZEROS,
         crossing,
-        eta_exact,
+        eta_fast,
         eta_sums,
         eta_terms,
         theta,
@@ -153,7 +181,7 @@ def _(math, mp, np):
 
 
 @app.cell(hide_code=True)
-def _(go, mo, np):
+def _(go, math, mo, np):
     # Chart styling (light or dark, following marimo's theme) and drawing helpers.
 
     _dark = mo.app_meta().theme == "dark"
@@ -208,12 +236,17 @@ def _(go, mo, np):
                          title_text="imaginary part", row=row, col=col)
 
 
+    def _heads(pts, px_per_unit, max_head):
+        """Arrowhead sizes: proportional to each segment's on-screen length, capped."""
+        seg_px = np.abs(np.diff(pts)) * px_per_unit
+        return np.concatenate([[0.0], np.clip(0.45 * seg_px, 0.0, max_head)])
+
+
     def arrows(points, color, width, px_per_unit, name, showlegend=True, hover=None,
                dash=None, max_head=12, xaxis=None, yaxis=None):
         """A path through the points, with an arrowhead at the end of every segment."""
         pts = np.asarray(points, dtype=complex)
-        seg_px = np.abs(np.diff(pts)) * px_per_unit
-        size = np.concatenate([[0.0], np.clip(0.45 * seg_px, 0.0, max_head)])
+        size = _heads(pts, px_per_unit, max_head)
         extra = {}
         if xaxis:
             extra = dict(xaxis=xaxis, yaxis=yaxis)
@@ -226,6 +259,18 @@ def _(go, mo, np):
             hovertemplate="<extra></extra>" if hover is None else hover[1],
             **extra,
         )
+
+
+    def arrow_frame(points, px_per_unit, max_head=12, color=None):
+        """The changing parts of an arrows() trace, for an animation frame. Frames carry
+        only what changes; plotly keeps the rest of the trace's styling."""
+        pts = np.asarray(points, dtype=complex)
+        size = _heads(pts, px_per_unit, max_head)
+        update = dict(x=pts.real, y=pts.imag, marker=dict(size=size, standoff=size / 2))
+        if color:
+            update["line"] = dict(color=color)
+            update["marker"]["color"] = color
+        return update
 
 
     def dot(z, color, name, symbol="circle", size=10, showlegend=True, **extra):
@@ -291,7 +336,8 @@ def _(go, mo, np):
                        for name, lab in zip(step_names, step_labels)])]
         fig.update_layout(updatemenus=menus, sliders=sliders)
         return fig
-    return C, add_player, arrows, dot, fmt_c, fmt_r, plane_window, style, tex_c
+    return (C, add_player, arrow_frame, arrows, dot, fmt_c, fmt_r, plane_window, style,
+            tex_c)
 
 
 @app.cell(hide_code=True)
@@ -332,9 +378,7 @@ def two_series(mo):
 
     Eta is zeta with every other sign flipped:
 
-    $$\zeta(s) = \frac{1}{1^s} + \frac{1}{2^s} + \frac{1}{3^s} + \frac{1}{4^s} + \cdots
-    \qquad\qquad
-    \eta(s) = \frac{1}{1^s} - \frac{1}{2^s} + \frac{1}{3^s} - \frac{1}{4^s} + \cdots$$
+    $$\zeta(s) = \frac{1}{1^s} + \frac{1}{2^s} + \frac{1}{3^s} + \frac{1}{4^s} + \cdots \qquad\qquad \eta(s) = \frac{1}{1^s} - \frac{1}{2^s} + \frac{1}{3^s} - \frac{1}{4^s} + \cdots$$
     """)
     return
 
@@ -451,9 +495,7 @@ def frag_two_sums(mo):
     mo.md(r"""
     So a zero needs **two** real sums to vanish at the same $t$:
 
-    $$\sum_{n \ge 1} \frac{(-1)^{n-1}\cos(t\ln n)}{\sqrt n} = 0
-    \qquad\text{and}\qquad
-    \sum_{n \ge 1} \frac{(-1)^{n-1}\sin(t\ln n)}{\sqrt n} = 0$$
+    $$\sum_{n \ge 1} \frac{(-1)^{n-1}\cos(t\ln n)}{\sqrt n} = 0 \qquad\text{and}\qquad \sum_{n \ge 1} \frac{(-1)^{n-1}\sin(t\ln n)}{\sqrt n} = 0$$
     """)
     return
 
@@ -476,8 +518,8 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def one_term(C, GAMMA1, add_player, arrows, dot, go, math, mo, np, one_n, plane_window,
-             style, tex_c):
+def one_term(C, GAMMA1, add_player, arrow_frame, arrows, dot, go, math, mo, np, one_n,
+             plane_window, style, tex_c):
     def rotation_figure(t, n, turn_frames=40, settle_frames=10):
         """The arrow for term n turning clockwise by t ln n, shrinking, then flipping."""
         turn = t * math.log(n)
@@ -500,30 +542,33 @@ def one_term(C, GAMMA1, add_player, arrows, dot, go, math, mo, np, one_n, plane_
         states[-1] = (turn, sign * length, f"eta's term {n} = {final.real:.4f} "
                                            f"{'+' if final.imag >= 0 else '−'} {abs(final.imag):.4f}i")
 
-        def moving(done, scale):
+        def trail(done):
             angles = np.linspace(0, done, max(2, int(done * 12)))
-            trail = (0.25 + 0.05 * angles / (2 * math.pi)) * np.exp(-1j * angles)
-            tip = scale * complex(math.cos(done), -math.sin(done))
-            return [
-                go.Scatter(x=trail.real, y=trail.imag, mode="lines", name="angle turned",
-                           line=dict(color=C["ink2"], width=1.5), hoverinfo="skip"),
-                arrows([0, tip], C["blue"] if scale > 0 else C["orange"], 4, ppu,
-                       "the arrow", max_head=16),
-            ]
+            return (0.25 + 0.05 * angles / (2 * math.pi)) * np.exp(-1j * angles)
 
+        def tip(done, scale):
+            return scale * complex(math.cos(done), -math.sin(done))
+
+        last_done, last_scale = states[-1][:2]
         circle = np.exp(1j * np.linspace(0, 2 * np.pi, 200))
-        fig = go.Figure(
-            data=[go.Scatter(x=circle.real, y=circle.imag, mode="lines", name="radius 1",
-                             line=dict(color=C["muted"], width=1, dash="dot"), hoverinfo="skip"),
-                  dot(0j, C["ink"], "0", symbol="circle-open", size=8, showlegend=False)]
-                 + moving(*states[-1][:2]),
-            frames=[go.Frame(name=str(i), data=moving(done, scale), traces=[2, 3],
-                             layout=dict(title_text=label))
-                    for i, (done, scale, label) in enumerate(states)],
-        )
+        fig = go.Figure(data=[
+            go.Scatter(x=circle.real, y=circle.imag, mode="lines", name="radius 1",
+                       line=dict(color=C["muted"], width=1, dash="dot"), hoverinfo="skip"),
+            dot(0j, C["ink"], "0", symbol="circle-open", size=8, showlegend=False),
+            go.Scatter(x=trail(last_done).real, y=trail(last_done).imag, mode="lines",
+                       name="angle turned", line=dict(color=C["ink2"], width=1.5),
+                       hoverinfo="skip"),
+            arrows([0, tip(last_done, last_scale)], C["blue"] if last_scale > 0 else C["orange"],
+                   4, ppu, "the arrow", max_head=16),
+        ])
+        fig.frames = [go.Frame(name=str(i), traces=[2, 3], layout=dict(title_text=label), data=[
+            dict(x=trail(done).real, y=trail(done).imag),
+            arrow_frame([0, tip(done, scale)], ppu, max_head=16,
+                        color=C["blue"] if scale > 0 else C["orange"]),
+        ]) for i, (done, scale, label) in enumerate(states)]
         fig.update_layout(title_text=states[-1][2])
         plane_window(fig, 0j, 1.3, xtitle=False)
-        style(fig, height=540, legend="right", top=40, bottom=75)
+        style(fig, height=495, legend="right", top=40, bottom=75)
         return add_player(fig, duration=60, from_start=True)
 
 
@@ -567,10 +612,10 @@ def _(NOT_A_ZERO, ZEROS, mo):
 
 
 @app.cell(hide_code=True)
-def first_30(C, add_player, arrows, dot, eta_sums, eta_terms, fmt_c, go, math, mo, pick_t,
-             plane_window, style):
-    def first_arrows_figure(t, count=30, grow=4, hold=2):
-        """Eta's first arrows added tip to tail, one at a time."""
+def first_30(C, add_player, arrow_frame, arrows, dot, eta_sums, eta_terms, fmt_c, go, math,
+             mo, pick_t, plane_window, style):
+    def first_arrows_figure(t, count=30, grow=4):
+        """Eta's first arrows added tip to tail, one at a time (each grows into place)."""
         sums = eta_sums(t, count)
         terms = eta_terms(t, count)
         xs, ys = sums.real, sums.imag
@@ -578,13 +623,8 @@ def first_30(C, add_player, arrows, dot, eta_sums, eta_terms, fmt_c, go, math, m
         radius = 0.55 * max(xs.max() - xs.min(), ys.max() - ys.min()) + 0.06
         ppu = 420 / (2 * radius)
 
-        def moving(n, f):
-            tip = sums[n - 1] + f * (sums[n] - sums[n - 1])
-            return [
-                arrows(sums[:n], C["muted"], 1.5, ppu, "earlier terms"),
-                arrows([sums[n - 1], tip], C["orange"], 3.5, ppu, "the new term", max_head=15),
-                arrows([0, tip], C["blue"], 3, ppu, "the running total", max_head=15),
-            ]
+        def tip(n, f):
+            return sums[n - 1] + f * (sums[n] - sums[n - 1])
 
         def caption(n):
             turn = t * math.log(n)
@@ -592,22 +632,27 @@ def first_30(C, add_player, arrows, dot, eta_sums, eta_terms, fmt_c, go, math, m
                     f" = {fmt_c(complex(terms[n - 1]))}<br><b>total S<sub>{n}</sub></b> = "
                     f"{fmt_c(complex(sums[n]))}, at distance {abs(sums[n]):.4f} from 0")
 
+        fig = go.Figure(data=[
+            arrows(sums[:1], C["muted"], 1.5, ppu, "earlier terms"),
+            arrows([sums[0], sums[1]], C["orange"], 3.5, ppu, "the new term", max_head=15),
+            arrows([0, sums[1]], C["blue"], 3, ppu, "the running total", max_head=15),
+            dot(0j, C["ink"], "0", symbol="circle-open", size=12, showlegend=False),
+        ])
         frames = []
         for n in range(1, count + 1):
-            for g in range(1, grow + 1):
-                frames.append(go.Frame(name=f"{n}.{g}", data=moving(n, g / grow),
-                                       traces=[0, 1, 2], layout=dict(title_text=caption(n))))
-            for h in range(hold):
-                frames.append(go.Frame(name=str(n) if h == hold - 1 else f"{n}.h{h}",
-                                       data=moving(n, 1.0), traces=[0, 1, 2],
-                                       layout=dict(title_text=caption(n))))
-        fig = go.Figure(data=moving(1, 1.0) + [dot(0j, C["ink"], "0", symbol="circle-open",
-                                                   size=12, showlegend=False)],
-                        frames=frames)
+            for g in range(1, grow + 1):  # the last growth step is the finished arrow
+                f = g / grow
+                frames.append(go.Frame(
+                    name=str(n) if g == grow else f"{n}.{g}", traces=[0, 1, 2],
+                    layout=dict(title_text=caption(n)),
+                    data=[arrow_frame(sums[:n], ppu),
+                          arrow_frame([sums[n - 1], tip(n, f)], ppu, max_head=15),
+                          arrow_frame([0, tip(n, f)], ppu, max_head=15)]))
+        fig.frames = frames
         fig.update_layout(title_text=caption(1))
         plane_window(fig, center, radius, xtitle=False)
-        style(fig, height=590, legend="right", top=70, bottom=85)
-        return add_player(fig, duration=90, step_names=[str(n) for n in range(1, count + 1)],
+        style(fig, height=540, legend="right", top=70, bottom=85)
+        return add_player(fig, duration=110, step_names=[str(n) for n in range(1, count + 1)],
                           step_labels=[str(n) for n in range(1, count + 1)], prefix="terms added: ")
 
 
@@ -639,8 +684,8 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def keep_adding(C, add_player, arrows, compare_zeta, dot, eta_exact, eta_sums, fmt_c, go,
-                make_subplots, mo, np, pick_t, plane_window, style, zeta_sums):
+def keep_adding(C, add_player, arrow_frame, arrows, compare_zeta, dot, eta_fast, eta_sums, fmt_c,
+                go, make_subplots, mo, np, pick_t, plane_window, style, zeta_sums):
     _N_MAX = 5000
     _IDX = np.unique(np.concatenate([np.arange(1, 101), np.geomspace(100, _N_MAX, 250).astype(int)]))
 
@@ -648,31 +693,15 @@ def keep_adding(C, add_player, arrows, compare_zeta, dot, eta_exact, eta_sums, f
     def closing_in_figure(t, show_zeta):
         """The running total S_N for N = 30 ... 5000, riding a circle of radius 1/(2 sqrt N)."""
         sums = eta_sums(t, _N_MAX)
-        target = eta_exact(t)
+        target = eta_fast(t)
         is_zero = abs(target) < 1e-6
-        steps = np.unique(np.geomspace(30, _N_MAX, 80).round().astype(int))
+        steps = np.unique(np.geomspace(30, _N_MAX, 70).round().astype(int))
         radius = 1.35 * max(abs(sums[30] - target), 0.5 / np.sqrt(30))
         ppu = 300 / (2 * radius)
-        dist = np.abs(sums[_IDX])
-        ring = np.exp(1j * np.linspace(0, 2 * np.pi, 120))
+        ring = np.exp(1j * np.linspace(0, 2 * np.pi, 72))
 
-        def moving(n):
-            circle = target + 0.5 / np.sqrt(n) * ring
-            upto = _IDX <= n
-            return [
-                go.Scatter(x=circle.real, y=circle.imag, mode="lines", name="radius 1/(2√N)",
-                           line=dict(color=C["ink2"], width=1.2, dash="dot"), hoverinfo="skip",
-                           xaxis="x", yaxis="y"),
-                arrows([0, sums[n]], C["blue"], 3, ppu, "running total S<sub>N</sub>",
-                       max_head=14, xaxis="x", yaxis="y"),
-                go.Scatter(x=_IDX[upto], y=dist[upto], mode="lines", name="distance from 0",
-                           line=dict(color=C["blue"], width=2.5), xaxis="x2", yaxis="y2",
-                           hovertemplate="N = %{x}: %{y:.5f}<extra></extra>"),
-                go.Scatter(x=[n], y=[abs(sums[n])], mode="markers", showlegend=False,
-                           marker=dict(size=11, color=C["blue"],
-                                       line=dict(width=2, color=C["surface"])),
-                           xaxis="x2", yaxis="y2", hoverinfo="skip"),
-            ]
+        def circle(n):
+            return target + 0.5 / np.sqrt(n) * ring
 
         def caption(n):
             s = complex(sums[n])
@@ -682,9 +711,17 @@ def keep_adding(C, add_player, arrows, compare_zeta, dot, eta_exact, eta_sums, f
             return (f"<b>N = {n}</b>: S<sub>N</sub> = {fmt_c(s, 5)}, closing in on "
                     f"η = {fmt_c(target, 3)}, not on 0")
 
+        n0 = steps[0]
         fig = make_subplots(rows=1, cols=2, column_widths=[0.45, 0.55], horizontal_spacing=0.12)
-        for tr in moving(steps[0]):
-            fig.add_trace(tr)
+        fig.add_trace(go.Scatter(x=circle(n0).real, y=circle(n0).imag, mode="lines",
+                                 name="radius 1/(2√N)", hoverinfo="skip",
+                                 line=dict(color=C["ink2"], width=1.2, dash="dot")), row=1, col=1)
+        fig.add_trace(arrows([0, sums[n0]], C["blue"], 3, ppu, "running total S<sub>N</sub>",
+                             max_head=14), row=1, col=1)
+        fig.add_trace(go.Scatter(x=[n0], y=[abs(sums[n0])], mode="markers", showlegend=False,
+                                 marker=dict(size=11, color=C["blue"],
+                                             line=dict(width=2, color=C["surface"])),
+                                 hoverinfo="skip"), row=1, col=2)
         if is_zero:
             fig.add_trace(dot(0j, C["ink"], "0, the target", symbol="cross-thin", size=14),
                           row=1, col=1)
@@ -694,20 +731,26 @@ def keep_adding(C, add_player, arrows, compare_zeta, dot, eta_exact, eta_sums, f
         fig.add_trace(go.Scatter(x=_IDX, y=0.5 / np.sqrt(_IDX), mode="lines", name="1/(2√N)",
                                  line=dict(color=C["ink2"], width=1.2, dash="dash"),
                                  hovertemplate="1/(2√N) = %{y:.5f}<extra></extra>"), row=1, col=2)
+        fig.add_trace(go.Scatter(x=_IDX, y=np.abs(sums[_IDX]), mode="lines", name="distance from 0",
+                                 line=dict(color=C["blue"], width=2.5),
+                                 hovertemplate="N = %{x}: %{y:.5f}<extra></extra>"), row=1, col=2)
         if show_zeta:
             fig.add_trace(go.Scatter(x=_IDX, y=np.abs(zeta_sums(t, _N_MAX)[_IDX]), mode="lines",
                                      name="zeta's own total", line=dict(color=C["orange"], width=2),
                                      hovertemplate="zeta, N = %{x}: %{y:.3f}<extra></extra>"),
                           row=1, col=2)
-        fig.frames = [go.Frame(name=str(n), data=moving(n), traces=[0, 1, 2, 3],
-                               layout=dict(title_text=caption(n))) for n in steps]
-        fig.update_layout(title_text=caption(steps[0]))
+        fig.frames = [go.Frame(name=str(n), traces=[0, 1, 2], layout=dict(title_text=caption(n)),
+                               data=[dict(x=circle(n).real, y=circle(n).imag),
+                                     arrow_frame([0, sums[n]], ppu, max_head=14),
+                                     dict(x=[n], y=[abs(sums[n])], xaxis="x2", yaxis="y2")])
+                      for n in steps]
+        fig.update_layout(title_text=caption(n0))
         plane_window(fig, target, radius, row=1, col=1, xtitle=False)
         fig.update_xaxes(type="log", dtick=1, range=[0, np.log10(_N_MAX)], row=1, col=2)
         fig.update_yaxes(type="log", dtick=1, range=[-2.5, 1.2 if show_zeta else 0.7],
                          title_text="distance from 0", row=1, col=2)
-        style(fig, height=450, legend="top", top=62, bottom=85)
-        return add_player(fig, duration=150, step_names=[str(n) for n in steps],
+        style(fig, height=405, legend="top", top=62, bottom=85)
+        return add_player(fig, duration=170, step_names=[str(n) for n in steps],
                           step_labels=[str(n) for n in steps], prefix="N = ", quiet_ticks=True)
 
 
@@ -762,7 +805,7 @@ def all_zeros(C, NOT_A_ZERO, ZEROS, eta_sums, functools, go, mo, np, pick_t, sty
         ))
         fig.update_xaxes(type="log", dtick=1, title_text="number of terms N")
         fig.update_yaxes(type="log", dtick=1, title_text="distance from 0", range=[-3.5, 1.0])
-        return style(fig, height=440, top=35, bottom=55)
+        return style(fig, height=395, top=35, bottom=55)
 
 
     mo.vstack([
@@ -798,8 +841,7 @@ def make_real(mo):
     Riemann's **mirror formula**: on our line, zeta is its own mirror image (complex
     conjugate) turned by $-2\theta$, where $\theta$ is a real angle:
 
-    $$\zeta\!\left(\tfrac12 + it\right) = e^{-2i\theta(t)}\;\overline{\zeta\!\left(\tfrac12 + it\right)},
-    \qquad \theta(t) \approx \frac t2 \ln\frac{t}{2\pi} - \frac t2 - \frac\pi8 + \frac{1}{48t}$$
+    $$\zeta\!\left(\tfrac12 + it\right) = e^{-2i\theta(t)}\;\overline{\zeta\!\left(\tfrac12 + it\right)}, \qquad \theta(t) \approx \frac t2 \ln\frac{t}{2\pi} - \frac t2 - \frac\pi8 + \frac{1}{48t}$$
 
     Turn zeta by $+\theta$: $\;Z(t) = e^{i\theta}\,\zeta$. Why is that real? Write $\zeta$ for $\zeta(\tfrac12 + it)$.
     """)
@@ -836,45 +878,42 @@ def frag_real_done(mo):
 
 
 @app.cell(hide_code=True)
-def z_stays_real(C, ZEROS, add_player, arrows, fmt_c, fmt_r, go, make_subplots, math, mo, np,
-                 plane_window, style, theta, zeta_on_line):
-    def turning_figure(t_from=10.0, t_to=35.0, step=0.125):
+def z_stays_real(C, ZEROS, add_player, arrow_frame, arrows, fmt_c, fmt_r, go, make_subplots,
+                 math, mo, np, plane_window, style, theta, zeta_on_line):
+    def turning_figure(t_from=10.0, t_to=35.0, step=0.2):
         """zeta(1/2 + it) wanders, but turned by theta(t) it always lands on the real axis."""
         ts = np.round(np.arange(t_from, t_to + 1e-9, step), 3)
-        zetas = [zeta_on_line(t) for t in ts]
-        turned = [(complex(math.cos(theta(t)), math.sin(theta(t))) * z).real
-                  for t, z in zip(ts, zetas)]
-        radius = 1.1 * max(abs(z) for z in zetas)
+        zetas = zeta_on_line(ts)
+        turned = (np.exp(1j * theta(ts)) * zetas).real
+        curve_ts = np.arange(t_from, t_to + 1e-9, 0.05)
+        curve = (np.exp(1j * theta(curve_ts)) * zeta_on_line(curve_ts)).real
+        radius = 1.1 * float(np.abs(zetas).max())
         ppu = 280 / (2 * radius)
 
-        def moving(k):
-            t, z, zt = ts[k], zetas[k], turned[k]
+        def line(t):
             d = complex(math.cos(theta(t)), -math.sin(theta(t)))  # direction at angle -theta
-            return [
-                go.Scatter(x=[-1.5 * radius * d.real, 1.5 * radius * d.real],
-                           y=[-1.5 * radius * d.imag, 1.5 * radius * d.imag], mode="lines",
-                           name="the line at angle −θ", line=dict(color=C["muted"], width=1.2,
-                                                                 dash="dash"),
-                           hoverinfo="skip", xaxis="x", yaxis="y"),
-                arrows([0, z.conjugate()], C["muted"], 2, ppu, "its mirror image", dash="dot",
-                       xaxis="x", yaxis="y"),
-                arrows([0, z], C["blue"], 3.5, ppu, "ζ(½ + it)", max_head=14, xaxis="x", yaxis="y"),
-                arrows([0, complex(zt, 0)], C["aqua"], 3.5, ppu, "Z(t) = e<sup>iθ</sup>ζ",
-                       max_head=14, xaxis="x", yaxis="y"),
-                go.Scatter(x=[t], y=[zt], mode="markers", showlegend=False,
-                           marker=dict(size=11, color=C["aqua"],
-                                       line=dict(width=2, color=C["surface"])),
-                           xaxis="x2", yaxis="y2", hoverinfo="skip"),
-            ]
+            return [-1.5 * radius * d, 1.5 * radius * d]
 
         def caption(k):
             return (f"<b>t = {ts[k]:.2f}</b>: ζ = {fmt_c(zetas[k], 3)}, θ(t) = {fmt_r(theta(ts[k]), 3)}, "
                     f"turned: Z = {fmt_r(turned[k], 3, plus=True)}")
 
+        z0 = complex(zetas[0])
         fig = make_subplots(rows=1, cols=2, column_widths=[0.42, 0.58], horizontal_spacing=0.1)
-        for tr in moving(0):
-            fig.add_trace(tr)
-        fig.add_trace(go.Scatter(x=ts, y=turned, mode="lines", showlegend=False,
+        l0 = line(ts[0])
+        fig.add_trace(go.Scatter(x=[l0[0].real, l0[1].real], y=[l0[0].imag, l0[1].imag],
+                                 mode="lines", name="the line at angle −θ", hoverinfo="skip",
+                                 line=dict(color=C["muted"], width=1.2, dash="dash")), row=1, col=1)
+        fig.add_trace(arrows([0, z0.conjugate()], C["muted"], 2, ppu, "its mirror image",
+                             dash="dot"), row=1, col=1)
+        fig.add_trace(arrows([0, z0], C["blue"], 3.5, ppu, "ζ(½ + it)", max_head=14), row=1, col=1)
+        fig.add_trace(arrows([0, complex(turned[0], 0)], C["aqua"], 3.5, ppu,
+                             "Z(t) = e<sup>iθ</sup>ζ", max_head=14), row=1, col=1)
+        fig.add_trace(go.Scatter(x=[ts[0]], y=[turned[0]], mode="markers", showlegend=False,
+                                 marker=dict(size=11, color=C["aqua"],
+                                             line=dict(width=2, color=C["surface"])),
+                                 hoverinfo="skip"), row=1, col=2)
+        fig.add_trace(go.Scatter(x=curve_ts, y=curve, mode="lines", showlegend=False,
                                  line=dict(color=C["aqua"], width=2),
                                  hovertemplate="t = %{x:.2f}<br>Z = %{y:.4f}<extra></extra>"),
                       row=1, col=2)
@@ -882,14 +921,24 @@ def z_stays_real(C, ZEROS, add_player, arrows, fmt_c, fmt_r, go, make_subplots, 
         fig.add_trace(go.Scatter(x=inside, y=[0] * len(inside), mode="markers", showlegend=False,
                                  marker=dict(size=8, color=C["ink"]),
                                  hovertemplate="zero at t = %{x:.4f}<extra></extra>"), row=1, col=2)
-        fig.frames = [go.Frame(name=f"{t:.3f}", data=moving(k), traces=[0, 1, 2, 3, 4],
-                               layout=dict(title_text=caption(k))) for k, t in enumerate(ts)]
+        frames = []
+        for k, t in enumerate(ts):
+            z, lk = complex(zetas[k]), line(t)
+            frames.append(go.Frame(name=f"{t:.3f}", traces=[0, 1, 2, 3, 4],
+                                   layout=dict(title_text=caption(k)), data=[
+                dict(x=[lk[0].real, lk[1].real], y=[lk[0].imag, lk[1].imag]),
+                arrow_frame([0, z.conjugate()], ppu),
+                arrow_frame([0, z], ppu, max_head=14),
+                arrow_frame([0, complex(turned[k], 0)], ppu, max_head=14),
+                dict(x=[t], y=[turned[k]], xaxis="x2", yaxis="y2"),
+            ]))
+        fig.frames = frames
         fig.update_layout(title_text=caption(0))
         plane_window(fig, 0j, radius, row=1, col=1, xtitle=False)
         fig.update_xaxes(range=[t_from, t_to], row=1, col=2)
         fig.update_yaxes(title_text="Z(t)", row=1, col=2)
-        style(fig, height=500, legend="top", top=62, bottom=85)
-        return add_player(fig, duration=70, step_names=[f"{t:.3f}" for t in ts],
+        style(fig, height=450, legend="top", top=62, bottom=85)
+        return add_player(fig, duration=90, step_names=[f"{t:.3f}" for t in ts],
                           step_labels=[f"{t:.2f}" for t in ts], prefix="t = ", quiet_ticks=True)
 
 
@@ -913,8 +962,7 @@ def pairs_math(mo):
     Riemann replaced zeta's endless sum by its first $N = \lfloor\sqrt{t/2\pi}\,\rfloor$
     arrows, their mirror images, and a small correction:
 
-    $$\zeta\!\left(\tfrac12 + it\right) \approx \sum_{n=1}^{N} \frac{e^{-it\ln n}}{\sqrt n}
-    \;+\; e^{-2i\theta(t)} \sum_{n=1}^{N} \frac{e^{+it\ln n}}{\sqrt n} \;+\; \text{correction}$$
+    $$\zeta\!\left(\tfrac12 + it\right) \approx \sum_{n=1}^{N} \frac{e^{-it\ln n}}{\sqrt n} \;+\; e^{-2i\theta(t)} \sum_{n=1}^{N} \frac{e^{+it\ln n}}{\sqrt n} \;+\; \text{correction}$$
     """)
     return
 
@@ -924,9 +972,7 @@ def frag_pairs_turn(mo):
     mo.md(r"""
     **Turn by $\theta$.** Term $n$ and its mirror become a pair, with $\varphi = \theta(t) - t\ln n$:
 
-    $$e^{i\theta}\cdot\frac{e^{-it\ln n}}{\sqrt n} = \frac{e^{i\varphi}}{\sqrt n}
-    \qquad\text{and}\qquad
-    e^{i\theta}\cdot e^{-2i\theta}\,\frac{e^{it\ln n}}{\sqrt n} = \frac{e^{-i\varphi}}{\sqrt n}$$
+    $$e^{i\theta}\cdot\frac{e^{-it\ln n}}{\sqrt n} = \frac{e^{i\varphi}}{\sqrt n} \qquad\text{and}\qquad e^{i\theta}\cdot e^{-2i\theta}\,\frac{e^{it\ln n}}{\sqrt n} = \frac{e^{-i\varphi}}{\sqrt n}$$
     """)
     return
 
@@ -948,8 +994,7 @@ def rs_formula(mo):
 
     Adding up the pairs:
 
-    $$Z(t) \approx 2\sum_{n=1}^{N} \frac{\cos\!\big(\theta(t) - t\ln n\big)}{\sqrt n} + R(t),
-    \qquad N = \Big\lfloor\sqrt{t/2\pi}\,\Big\rfloor$$
+    $$Z(t) \approx 2\sum_{n=1}^{N} \frac{\cos\!\big(\theta(t) - t\ln n\big)}{\sqrt n} + R(t), \qquad N = \Big\lfloor\sqrt{t/2\pi}\,\Big\rfloor$$
     """)
     return
 
@@ -959,8 +1004,7 @@ def frag_rs_correction(mo):
     mo.md(r"""
     The first term of Riemann's correction, with $p = \sqrt{t/2\pi} - N$ (the part after the decimal point):
 
-    $$R(t) \approx (-1)^{N-1}\Big(\frac{t}{2\pi}\Big)^{-1/4}\,
-    \frac{\cos\!\big(2\pi(p^2 - p - \tfrac1{16})\big)}{\cos(2\pi p)}$$
+    $$R(t) \approx (-1)^{N-1}\Big(\frac{t}{2\pi}\Big)^{-1/4}\, \frac{\cos\!\big(2\pi(p^2 - p - \tfrac1{16})\big)}{\cos(2\pi p)}$$
     """)
     return
 
@@ -976,7 +1020,7 @@ def frag_rs_one(mo):
 
 
 @app.cell(hide_code=True)
-def _(TWO_PI, math, mp, theta):
+def _(TWO_PI, math, theta):
     # Riemann's formula, with his first correction term.
 
     def terms_needed(t):
@@ -1001,12 +1045,7 @@ def _(TWO_PI, math, mp, theta):
         cosines = sum(2 * math.cos(th - t * math.log(n)) / math.sqrt(n)
                       for n in range(1, terms_needed(t) + 1))
         return cosines + correction(t)
-
-
-    def true_z(t):
-        """The exact Z(t), from mpmath, to compare against."""
-        return float(mp.siegelz(t))
-    return riemann_z, true_z
+    return (riemann_z,)
 
 
 @app.cell(hide_code=True)
@@ -1024,7 +1063,7 @@ def _(math, theta, theta_slope):
     THETA_STAR = -math.acos(-R_HALF / 2)               # the angle between theta(14) and theta(14.5)
     NEWTON = [13.0]  # a rough first guess, so the first tangent step is visible
     for _ in range(3):
-        NEWTON.append(NEWTON[-1] + (THETA_STAR - theta(NEWTON[-1])) / theta_slope(NEWTON[-1]))
+        NEWTON.append(float(NEWTON[-1] + (THETA_STAR - theta(NEWTON[-1])) / theta_slope(NEWTON[-1])))
     return NEWTON, R_HALF, THETA_STAR
 
 
@@ -1040,8 +1079,7 @@ def riemann_equation(R_HALF, mo):
     Near the zero, $\sqrt{{t/2\pi}}$ is almost exactly $\tfrac32$, so $p = \tfrac12$ and the
     correction has a simple value:
 
-    $$R = \Big(\tfrac94\Big)^{{-1/4}} \cdot \frac{{\cos\!\big(2\pi(\tfrac14 - \tfrac12 - \tfrac1{{16}})\big)}}{{\cos \pi}}
-    = \sqrt{{\tfrac23}}\,\sin\frac{{\pi}}{{8}} = {R_HALF:.4f}$$
+    $$R = \Big(\tfrac94\Big)^{{-1/4}} \cdot \frac{{\cos\!\big(2\pi(\tfrac14 - \tfrac12 - \tfrac1{{16}})\big)}}{{\cos \pi}} = \sqrt{{\tfrac23}}\,\sin\frac{{\pi}}{{8}} = {R_HALF:.4f}$$
 
     <small>Siegel reports that Riemann used this formula, with its correction series, for his
     calculations; the notes don't spell out every step, so this is the calculation the formula
@@ -1069,40 +1107,45 @@ def newton_slide(C, NEWTON, THETA_STAR, add_player, fmt_r, go, mo, np, style, th
     def newton_figure():
         """Newton's method on theta(t) = theta*: follow the tangent line, not the curve."""
         grid = np.linspace(12.8, 14.5, 200)
-        theta_grid = np.array([theta(t) for t in grid])
 
-        def moving(k):
+        def tangent(k):
             tk, tn = NEWTON[k], NEWTON[k + 1]
             span = np.array([min(tk, tn) - 0.25, max(tk, tn) + 0.25])
-            tangent = theta(tk) + theta_slope(tk) * (span - tk)
-            return [
-                go.Scatter(x=span, y=tangent, mode="lines", name="tangent line",
-                           line=dict(color=C["blue"], width=2, dash="dash"), hoverinfo="skip"),
-                go.Scatter(x=[tk], y=[theta(tk)], mode="markers", name="current guess",
-                           marker=dict(size=11, color=C["blue"]), hoverinfo="skip"),
-                go.Scatter(x=[tn, tn], y=[THETA_STAR, theta(tn)], mode="lines+markers",
-                           name="next guess", line=dict(color=C["orange"], width=1.2, dash="dot"),
-                           marker=dict(size=[11, 0], color=C["orange"]), hoverinfo="skip"),
-            ]
+            return span, theta(tk) + theta_slope(tk) * (span - tk)
 
         def caption(k):
             return (f"<b>step {k + 1}</b>: the tangent at t = {NEWTON[k]:.4f} reaches θ* at "
                     f"t = {NEWTON[k + 1]:.4f}")
 
-        fig = go.Figure(data=[go.Scatter(x=grid, y=theta_grid, mode="lines", name="θ(t)",
-                                         line=dict(color=C["ink"], width=2.5),
-                                         hovertemplate="t = %{x:.3f}<br>θ = %{y:.4f}<extra></extra>"),
-                              go.Scatter(x=[grid[0], grid[-1]], y=[THETA_STAR, THETA_STAR],
-                                         mode="lines", name=f"θ* = {fmt_r(THETA_STAR)}",
-                                         line=dict(color=C["orange"], width=1.5), hoverinfo="skip")]
-                        + moving(0),
-                        frames=[go.Frame(name=str(k), data=moving(k), traces=[2, 3, 4],
-                                         layout=dict(title_text=caption(k)))
-                                for k in range(len(NEWTON) - 1)])
+        span0, line0 = tangent(0)
+        fig = go.Figure(data=[
+            go.Scatter(x=grid, y=theta(grid), mode="lines", name="θ(t)",
+                       line=dict(color=C["ink"], width=2.5),
+                       hovertemplate="t = %{x:.3f}<br>θ = %{y:.4f}<extra></extra>"),
+            go.Scatter(x=[grid[0], grid[-1]], y=[THETA_STAR, THETA_STAR], mode="lines",
+                       name=f"θ* = {fmt_r(THETA_STAR)}", line=dict(color=C["orange"], width=1.5),
+                       hoverinfo="skip"),
+            go.Scatter(x=span0, y=line0, mode="lines", name="tangent line",
+                       line=dict(color=C["blue"], width=2, dash="dash"), hoverinfo="skip"),
+            go.Scatter(x=[NEWTON[0]], y=[theta(NEWTON[0])], mode="markers", name="current guess",
+                       marker=dict(size=11, color=C["blue"]), hoverinfo="skip"),
+            go.Scatter(x=[NEWTON[1], NEWTON[1]], y=[THETA_STAR, theta(NEWTON[1])],
+                       mode="lines+markers", name="next guess",
+                       line=dict(color=C["orange"], width=1.2, dash="dot"),
+                       marker=dict(size=[11, 0], color=C["orange"]), hoverinfo="skip"),
+        ])
+        frames = []
+        for k in range(len(NEWTON) - 1):
+            span, line = tangent(k)
+            tk, tn = NEWTON[k], NEWTON[k + 1]
+            frames.append(go.Frame(name=str(k), traces=[2, 3, 4], layout=dict(title_text=caption(k)),
+                                   data=[dict(x=span, y=line), dict(x=[tk], y=[theta(tk)]),
+                                         dict(x=[tn, tn], y=[THETA_STAR, theta(tn)])]))
+        fig.frames = frames
         fig.update_layout(title_text=caption(0))
         fig.update_xaxes(range=[12.8, 14.5])
         fig.update_yaxes(range=[-2.35, -1.4], title_text="θ(t)")
-        style(fig, height=280, legend="right", top=40, bottom=75)
+        style(fig, height=250, legend="right", top=40, bottom=75)
         return add_player(fig, duration=1600, step_names=[str(k) for k in range(len(NEWTON) - 1)],
                           step_labels=[f"t{k + 1}" for k in range(len(NEWTON) - 1)],
                           prefix="step: ")
@@ -1114,8 +1157,7 @@ def newton_slide(C, NEWTON, THETA_STAR, add_player, fmt_r, go, mo, np, style, th
 
     At a guess $t_k$, follow the **tangent line** of $\theta$ instead of the curve; where it reaches $\theta^*$ is the next guess:
 
-    $$t_{k+1} = t_k + \frac{\theta^* - \theta(t_k)}{\theta'(t_k)}, \qquad
-    \theta'(t) = \frac12 \ln\frac{t}{2\pi} - \frac{1}{48t^2}\quad\text{(differentiate $\theta$ term by term)}$$
+    $$t_{k+1} = t_k + \frac{\theta^* - \theta(t_k)}{\theta'(t_k)}, \qquad \theta'(t) = \frac12 \ln\frac{t}{2\pi} - \frac{1}{48t^2}\quad\text{(differentiate $\theta$ term by term)}$$
     """),
         newton_figure(),
     ])
@@ -1126,8 +1168,7 @@ def newton_slide(C, NEWTON, THETA_STAR, add_player, fmt_r, go, mo, np, style, th
 def frag_newton_steps(NEWTON, THETA_STAR, TWO_PI, mo, theta, theta_slope):
     _t0, _t1, _t2, _t3 = NEWTON
     mo.md(rf"""
-    From $t_0 = 13$: $\;t_1 = 13 + \frac{{{THETA_STAR - theta(_t0):.4f}}}{{{theta_slope(_t0):.4f}}}
-    = {_t1:.4f}$, $\;t_2 = {_t2:.4f}$, $\;t_3 = {_t3:.4f}$: each step roughly doubles the
+    From $t_0 = 13$: $\;t_1 = 13 + \frac{{{THETA_STAR - theta(_t0):.4f}}}{{{theta_slope(_t0):.4f}}} = {_t1:.4f}$, $\;t_2 = {_t2:.4f}$, $\;t_3 = {_t3:.4f}$: each step roughly doubles the
     correct digits. In Riemann's variable $x = t/2\pi$, that's $x = {_t3 / TWO_PI:.5f} \approx \tfrac94$
     (his notes: $2.250466$).
     """)
@@ -1173,7 +1214,7 @@ def how_close(C, CORRECTED_ZERO, GAMMA1, ONE_COSINE_ZERO, go, make_subplots, mo,
                          zerolinewidth=2)
         fig.update_yaxes(title_text="14.0 to 14.6", row=1, col=1)
         fig.update_yaxes(title_text="zoomed in", row=2, col=1)
-        return style(fig, height=470, top=20, bottom=40)
+        return style(fig, height=425, top=20, bottom=40)
 
 
     mo.vstack([
@@ -1190,16 +1231,15 @@ def how_close(C, CORRECTED_ZERO, GAMMA1, ONE_COSINE_ZERO, go, make_subplots, mo,
 
 
 @app.cell(hide_code=True)
-def beyond(C, TWO_PI, crossing, go, mo, mp, np, riemann_z, style, true_z):
+def beyond(ALL_ZEROS, C, TWO_PI, crossing, go, mo, np, riemann_z, style, z_from_eta):
     def beyond_figure(t_to=60.0):
-        zeros = [float(mp.zetazero(k).imag) for k in range(1, 14)]  # every zero below 60
         grid = np.arange(10.0, t_to + 1e-9, 0.04)
-        exact = [true_z(t) for t in grid]
-        approx = [riemann_z(t) for t in grid]
+        exact = z_from_eta(grid)
+        approx = np.array([riemann_z(t) for t in grid])
         brackets = [(grid[i], grid[i + 1]) for i in range(len(grid) - 1)
                     if (approx[i] > 0) != (approx[i + 1] > 0)]
         found = [crossing(riemann_z, lo, hi) for lo, hi in brackets]
-        gap = max(abs(a - b) for a, b in zip(exact, approx))
+        gap = float(np.abs(exact - approx).max())
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=grid, y=exact, mode="lines", name="true Z(t), by computer",
                                  line=dict(color=C["muted"], width=7), opacity=0.55,
@@ -1208,9 +1248,9 @@ def beyond(C, TWO_PI, crossing, go, mo, mp, np, riemann_z, style, true_z):
                                  line=dict(color=C["blue"], width=2),
                                  hovertemplate="t = %{x:.2f}<br>formula: %{y:.4f}<extra></extra>"))
         fig.add_trace(go.Scatter(
-            x=zeros, y=[0] * len(zeros), mode="markers", name="the zeros",
+            x=ALL_ZEROS, y=[0] * len(ALL_ZEROS), mode="markers", name="the zeros",
             marker=dict(size=10, color=C["aqua"], line=dict(width=2, color=C["surface"])),
-            customdata=np.column_stack([found, np.array(found) - np.array(zeros)]),
+            customdata=np.column_stack([found, np.array(found) - np.array(ALL_ZEROS)]),
             hovertemplate=("true zero %{x:.4f}<br>Riemann's formula: %{customdata[0]:.4f}"
                            "<br>off by %{customdata[1]:+.4f}<extra></extra>")))
         # An m-th cosine joins when sqrt(t/2pi) reaches m, at t = 2 pi m^2.
@@ -1219,8 +1259,8 @@ def beyond(C, TWO_PI, crossing, go, mo, mp, np, riemann_z, style, true_z):
                           annotation_text=label, annotation_position="top right")
         fig.update_xaxes(title_text="t")
         fig.update_yaxes(title_text="Z(t)")
-        return (style(fig, height=440, top=35, bottom=50), gap,
-                max(abs(f - z) for f, z in zip(found, zeros)))
+        return (style(fig, height=395, top=35, bottom=50), gap,
+                max(abs(f - z) for f, z in zip(found, ALL_ZEROS)))
 
 
     _fig, _gap, _worst = beyond_figure()
@@ -1266,10 +1306,9 @@ def frag_ivt_why(mo):
 def frag_ivt_example(C, fmt_r, go, mo, np, style, z_from_eta):
     def ivt_figure(a=14.0, b=14.5):
         grid = np.linspace(13.85, 14.65, 60)
-        values = [z_from_eta(t) for t in grid]
-        za, zb = z_from_eta(a), z_from_eta(b)
+        za, zb = float(z_from_eta(a)), float(z_from_eta(b))
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=grid, y=values, mode="lines", name="Z(t)",
+        fig.add_trace(go.Scatter(x=grid, y=z_from_eta(grid), mode="lines", name="Z(t)",
                                  line=dict(color=C["ink"], width=2.5),
                                  hovertemplate="t = %{x:.3f}<br>Z = %{y:.4f}<extra></extra>"))
         fig.add_trace(go.Scatter(x=[a], y=[za], mode="markers+text",
@@ -1282,7 +1321,7 @@ def frag_ivt_example(C, fmt_r, go, mo, np, style, z_from_eta):
                                  hoverinfo="skip"))
         fig.update_traces(textfont=dict(color=C["ink2"], size=13))
         fig.update_yaxes(title_text="Z(t)", zeroline=True, zerolinewidth=2)
-        return style(fig, height=230, legend="right", top=15, bottom=30), za, zb
+        return style(fig, height=205, legend="right", top=15, bottom=30), za, zb
 
 
     _fig, _za, _zb = ivt_figure()
@@ -1298,12 +1337,12 @@ def frag_ivt_example(C, fmt_r, go, mo, np, style, z_from_eta):
 
 @app.cell(hide_code=True)
 def _(np, z_from_eta):
-    # Z(t), computed from eta's sums, on [10, 50]; its sign changes on a 0.1 grid.
+    # Z(t), computed from eta's sums, on [10, 50]; its sign changes bracket the zeros.
     HUNT_GRID = np.arange(10.0, 50.0 + 1e-9, 0.025)
-    HUNT_Z = np.array([z_from_eta(t) for t in HUNT_GRID])
+    HUNT_Z = z_from_eta(HUNT_GRID)
     _coarse = np.arange(10.0, 50.0 + 1e-9, 0.1)
-    _signs = [z_from_eta(t) > 0 for t in _coarse]
-    HUNT_BRACKETS = [(_coarse[i], _coarse[i + 1]) for i in range(len(_coarse) - 1)
+    _signs = z_from_eta(_coarse) > 0
+    HUNT_BRACKETS = [(float(_coarse[i]), float(_coarse[i + 1])) for i in range(len(_coarse) - 1)
                      if _signs[i] != _signs[i + 1]]
     return HUNT_BRACKETS, HUNT_GRID, HUNT_Z
 
@@ -1325,31 +1364,24 @@ def hunt(C, HUNT_BRACKETS, HUNT_GRID, HUNT_Z, NOT_A_ZERO, add_player, go, make_s
             else:
                 hi = mid
 
-        def zoom(k):
+        def view(k):
             lo, hi = steps[k]
             w = hi - lo
             ts = np.linspace(lo - 0.5 * w, hi + 0.5 * w, samples)
-            zs = np.array([z_from_eta(x) for x in ts])
+            zs = z_from_eta(ts)
             top = 1.3 * float(np.abs(zs).max())
-            band = go.Scatter(x=[lo, hi, hi, lo, lo], y=[-top, -top, top, top, -top], fill="toself",
-                              mode="lines", line=dict(width=0), fillcolor="rgba(42,120,214,0.12)",
-                              name="the zero is in here", xaxis="x2", yaxis="y2", hoverinfo="skip")
-            curve = go.Scatter(x=ts, y=zs, mode="lines", name="Z(t)", showlegend=False,
-                               line=dict(color=C["ink"], width=2.5), xaxis="x2", yaxis="y2",
-                               hovertemplate="t = %{x}<br>Z = %{y:.3e}<extra></extra>")
-            axis = go.Scatter(x=[ts[0], ts[-1]], y=[0, 0], mode="lines", showlegend=False,
-                              line=dict(color=C["axis"], width=1), xaxis="x2", yaxis="y2",
-                              hoverinfo="skip")
             mid = (lo + hi) / 2
-            check = go.Scatter(x=[mid], y=[z_from_eta(mid)], mode="markers", name="next check: the midpoint",
-                               marker=dict(size=11, color=C["orange"],
-                                           line=dict(width=2, color=C["surface"])),
-                               xaxis="x2", yaxis="y2", hovertemplate="midpoint %{x}<extra></extra>")
             digits = max(1, math.ceil(-math.log10(w)) + 1)
             title = (f"<b>after {k} halving{'s' if k != 1 else ''}</b>: "
                      f"{lo:.{digits}f} < t < {hi:.{digits}f}   (width {w:.1e})")
-            return [band, curve, axis, check], ts, top, title
+            right = dict(xaxis="x2", yaxis="y2")
+            data = [dict(x=[lo, hi, hi, lo, lo], y=[-top, -top, top, top, -top], **right),
+                    dict(x=ts, y=zs, **right), dict(x=[ts[0], ts[-1]], y=[0, 0], **right),
+                    dict(x=[mid], y=[float(z_from_eta(mid))], **right)]
+            return data, ts, top, title
 
+        views = [view(k) for k in range(halvings + 1)]
+        data0, ts0, top0, title0 = views[0]
         fig = make_subplots(rows=1, cols=2, column_widths=[0.45, 0.55], horizontal_spacing=0.1)
         fig.add_trace(go.Scatter(x=HUNT_GRID, y=HUNT_Z, mode="lines", showlegend=False,
                                  line=dict(color=C["ink"], width=2),
@@ -1359,19 +1391,27 @@ def hunt(C, HUNT_BRACKETS, HUNT_GRID, HUNT_Z, NOT_A_ZERO, add_player, go, make_s
                                  marker=dict(size=12, color=C["orange"], symbol="circle-open",
                                              line=dict(width=2.5, color=C["orange"])),
                                  hoverinfo="skip"), row=1, col=1)
-        views = [zoom(k) for k in range(halvings + 1)]
-        for tr in views[0][0]:
-            fig.add_trace(tr)
+        fig.add_trace(go.Scatter(**data0[0], fill="toself", mode="lines", line=dict(width=0),
+                                 fillcolor="rgba(42,120,214,0.12)", name="the zero is in here",
+                                 hoverinfo="skip"), row=1, col=2)
+        fig.add_trace(go.Scatter(**data0[1], mode="lines", name="Z(t)", showlegend=False,
+                                 line=dict(color=C["ink"], width=2.5),
+                                 hovertemplate="t = %{x}<br>Z = %{y:.3e}<extra></extra>"), row=1, col=2)
+        fig.add_trace(go.Scatter(**data0[2], mode="lines", showlegend=False,
+                                 line=dict(color=C["axis"], width=1), hoverinfo="skip"), row=1, col=2)
+        fig.add_trace(go.Scatter(**data0[3], mode="markers", name="next check: the midpoint",
+                                 marker=dict(size=11, color=C["orange"],
+                                             line=dict(width=2, color=C["surface"])),
+                                 hovertemplate="midpoint %{x}<extra></extra>"), row=1, col=2)
         fig.frames = [go.Frame(name=str(k), data=data, traces=[2, 3, 4, 5], layout={
             "xaxis2": {"range": [ts[0], ts[-1]]}, "yaxis2": {"range": [-top, top]},
             "title": {"text": title}}) for k, (data, ts, top, title) in enumerate(views)]
-        _, ts0, top0, title0 = views[0]
         fig.update_layout(title_text=title0)
         fig.update_yaxes(title_text="Z(t), t from 10 to 50", row=1, col=1)
         fig.update_xaxes(range=[ts0[0], ts0[-1]], row=1, col=2)
         fig.update_yaxes(range=[-top0, top0], exponentformat="e", title_text="zoomed in",
                          row=1, col=2)
-        style(fig, height=450, legend="top", top=62, bottom=85)
+        style(fig, height=405, legend="top", top=62, bottom=85)
         return add_player(fig, duration=650, step_names=[str(k) for k in range(halvings + 1)],
                           step_labels=[str(k) for k in range(halvings + 1)], prefix="halvings: ")
 

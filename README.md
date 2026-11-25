@@ -1,5 +1,7 @@
 # Riemann-Code
 
+[![Open in molab](https://marimo.io/molab-shield.svg)](https://molab.marimo.io/github/justinstevens42/Riemann-Code/blob/main/finding_zeta_zeros.py/wasm?mode=read)
+
 Interactive slides on **finding the zeros of the Riemann zeta function**, built as a
 [marimo](https://marimo.io) notebook. The first zero sits at s = ½ + 14.134725…i; the deck
 finds it with nothing fancier than sines, cosines and a lot of adding, then shows how
@@ -14,7 +16,14 @@ Riemann found it by hand in the 1850s.
    Newton's method, how close Riemann's own value was, and finally the intermediate value
    theorem and bisection, the way zeros are pinned down today.
 
-## Run it
+## Run it in your browser
+
+Click **Open in molab** above. It runs entirely in your browser (WebAssembly): nothing to
+install and no account needed. It takes about 15 seconds to start. Use the arrow keys to
+move between slides and reveal each step; the animated charts have their own **▶ Play**
+buttons, and molab's full-screen button gives the slides more room.
+
+## Run it on your computer
 
 1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/).
 2. Download this repository (green **Code** button, then **Download ZIP**) or clone it.
@@ -25,11 +34,8 @@ Riemann found it by hand in the 1850s.
    ```
 
 It opens in your browser as slides. The first run takes a minute while it installs its
-packages into a throwaway environment; nothing is installed globally. Use the arrow keys
-to move between slides and reveal each step; the animated charts have their own
-**▶ Play** buttons.
-
-To browse it as a notebook instead (code hidden unless you click "Show code"):
+packages into a throwaway environment; nothing is installed globally. To browse it as a
+notebook instead (code hidden unless you click "Show code"):
 
 ```sh
 uvx marimo edit --sandbox finding_zeta_zeros.py
@@ -37,10 +43,9 @@ uvx marimo edit --sandbox finding_zeta_zeros.py
 
 ## Files
 
-- `finding_zeta_zeros.py`: the deck.
-- `layouts/finding_zeta_zeros.slides.json`: the slide layout. Keep it next to the deck;
-  without it, the deck opens as an ordinary notebook rather than as slides.
-- `make_slides_layout.py`: rebuilds the layout after cells are added or removed (cells
+- `finding_zeta_zeros.py`: the deck. Its slide layout is stored inside the file, so the
+  file works on its own, wherever it goes.
+- `make_slides_layout.py`: rebuilds that layout after cells are added or removed (cells
   named `frag_*` appear one step at a time). Run `uv run python make_slides_layout.py`.
 
 ## Sources
