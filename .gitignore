@@ -1,0 +1,8 @@
+# Python
+__pycache__/
+*.pyc
+
+# marimo session caches
+__marimo__/
+
+.DS_Store
